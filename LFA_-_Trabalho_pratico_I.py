@@ -136,16 +136,17 @@ class AutomatoFD:
         return novoAutomato
 
     def equivalenciaEstados(self):
-        matriz_equivalencia = []  # Inicialize uma lista para representar a matriz
+        matriz_equivalencia = []
 
         for estado1 in self.estados:
             for estado2 in self.estados:
                 if estado1 > estado2:
                     if testa_equivalencia(self, estado1, estado2):
-                        nova_linha = [estado1, estado2]  # Crie uma nova lista representando uma linha
-                        matriz_equivalencia.append(nova_linha)  # Adicione a nova linha à matriz
+                        nova_linha = [estado1, estado2]
+                        matriz_equivalencia.append(nova_linha)
 
-        return matriz_equivalencia  # Retorna a matriz de pares equivalentes
+        return matriz_equivalencia
+
 
 def obter_destino(self, origem, simbolo):
     if (origem, simbolo) in self.transicoes:
@@ -153,54 +154,114 @@ def obter_destino(self, origem, simbolo):
     else:
         return None
 
+
 def testa_equivalencia(self, estado1, estado2):
-    if(estado1 == obter_destino(self, estado2, 'b')):
-         return False
-    if (estado1 in self.finais and estado2 not in self.finais) or (
-            estado1 not in self.finais and estado2 in self.finais):
-        return False
-    else:
-        if (obter_destino(self, estado1, 'a') == obter_destino(self, estado2, 'a')) and (
-                obter_destino(self, estado1, 'b') == obter_destino(self, estado2, 'b')):
-            return True
+    for simbolo in self.alfabeto:
+        if estado1 == obter_destino(self, estado2, simbolo) and (estado2 == obter_destino(self, estado1, simbolo)):
+            return False
+        if (estado1 in self.finais and estado2 not in self.finais) or (
+                estado1 not in self.finais and estado2 in self.finais):
+            return False
         else:
-            if (obter_destino(self, estado1, 'a') != obter_destino(self, estado2, 'a')) and (
-                    obter_destino(self, estado1, 'b') != obter_destino(self, estado2, 'b')):
-                if(estado1 != obter_destino(self, estado2, 'a') and (estado2 != obter_destino(self, estado1,'b'))):
-                    if not (testa_equivalencia(self, obter_destino(self, estado1, 'a'), obter_destino(self, estado2, 'a'))):
+            if obter_destino(self, estado1, simbolo) == obter_destino(self, estado2, simbolo):
+                return True
+            else:
+                if obter_destino(self, estado1, simbolo) != obter_destino(self, estado2, simbolo):
+                    if not (testa_equivalencia(self, obter_destino(self, estado1, simbolo),
+                                               obter_destino(self, estado2, simbolo))):
                         return False
                     else:
-                        return testa_equivalencia(self, obter_destino(self, estado1, 'b'), obter_destino(self, estado2, 'b'))
+                        return testa_equivalencia(self, obter_destino(self, estado1, simbolo),
+                                                  obter_destino(self, estado2, simbolo))
                 else:
-                    return testa_equivalencia(self, obter_destino(self, estado1, 'b'),obter_destino(self, estado2, 'b'))
-            else:
-                if (obter_destino(self, estado1, 'a') != obter_destino(self, estado2, 'a')):
-                    return testa_equivalencia(self, obter_destino(self, estado1, 'a'),
-                                              obter_destino(self, estado2, 'a'))
-                else:
-                    return testa_equivalencia(self, obter_destino(self, estado1, 'b'),
-                                              obter_destino(self, estado2, 'b'))
+                    if obter_destino(self, estado1, simbolo) != obter_destino(self, estado2, simbolo):
+                        return testa_equivalencia(self, obter_destino(self, estado1, simbolo),
+                                                  obter_destino(self, estado2, simbolo))
+                    else:
+                        return testa_equivalencia(self, obter_destino(self, estado1, simbolo),
+                                                  obter_destino(self, estado2, simbolo))
+
+
+def UniaoAutomatos(automato1, automato2):
+    print(automato1.estados)
+    print(automato2.estados)
+    qtd_estados1 = len(automato1.estados)
+    qtd_estados2 = len(automato2.estados)
+    total_estados = qtd_estados2 + qtd_estados1 + 1
+
+    alfabeto = automato1.alfabeto
+    for simbolo in automato2.alfabeto:
+        if simbolo not in alfabeto:
+            alfabeto += simbolo
+
+    automato_concatenado = AutomatoFD(alfabeto)
+
+    for i in range(1, total_estados):
+        automato_concatenado.criaEstado(i)
+    automato_concatenado.mudaEstadoInicial(1)
+
+    for estado in range(1, qtd_estados1 + 1):
+        for simbolo in automato1.alfabeto:
+            automato_concatenado.criaTransicao(estado, obter_destino(automato1, estado, simbolo), simbolo)
+    for estado in range(1, qtd_estados2 + 1):
+        for simbolo in automato2.alfabeto:
+            automato_concatenado.criaTransicao(estado + qtd_estados1, obter_destino(automato2, estado, simbolo), simbolo)
+
+    automato_concatenado.finais = automato1.finais.union(automato2.finais)
+
+
+    if testa_equivalencia(automato_concatenado, automato1.inicial, automato1.inicial + qtd_estados1):
+        print("Os automatos são equivalentes!")
+        automato_concatenado.inicial = automato1.inicial
+    else:
+        print("Os automatos NÃO são equivalentes!")
+    return automato_concatenado
+
+
+# automato_concatenado = automato1.estados.union(automato2.estados.union())
+# print(automato_concatenado.estados)
 if __name__ == '__main__':
     afd = AutomatoFD('ab')
     afdSecundario = AutomatoFD('ab')
 
-    for i in range(1, 5):
+    for i in range(1, 4):
         afd.criaEstado(i)
     afd.mudaEstadoInicial(1)
+
+    # Define os estados finais
     afd.mudaEstadoFinal(2, True)
+
+    # Cria as transições
     afd.criaTransicao(1, 3, 'a')
     afd.criaTransicao(1, 2, 'b')
     afd.criaTransicao(2, 1, 'a')
     afd.criaTransicao(2, 2, 'b')
     afd.criaTransicao(3, 3, 'a')
     afd.criaTransicao(3, 2, 'b')
-    afd.criaTransicao(4, 3, 'a')
-    afd.criaTransicao(4, 2, 'b')
 
-    print("estados equivalentes:",afd.equivalenciaEstados())
+    for i in range(1, 4):
+        afdSecundario.criaEstado(i)
+    afdSecundario.mudaEstadoInicial(1)
 
-    print('automato salvo', afd)
-    afd.salvaAutomato('automatoArquivo')
+    # Define os estados finais
+    afdSecundario.mudaEstadoFinal(2, True)
+    afdSecundario.criaTransicao(1, 3, 'a')
+    afdSecundario.criaTransicao(1, 2, 'b')
+    afdSecundario.criaTransicao(2, 1, 'a')
+    afdSecundario.criaTransicao(2, 2, 'b')
+    afdSecundario.criaTransicao(3, 3, 'a')
+    afdSecundario.criaTransicao(3, 2, 'b')
+
+    #Eprint(afd)
+    #print(afdSecundario)
+    #print("estados equivalentes:", afd.equivalenciaEstados())
+    concatenado = UniaoAutomatos(afd, afdSecundario)
+    print(concatenado)
+    #print("O que esperar disso aqui?:", concatenado.equivalenciaEstados())
+
+
+    # print('automato salvo', afd)
+    # afd.salvaAutomato('automatoArquivo')
 
     cadeia = 'abbabaabbbbbba'
     afd.limpaAfd()
