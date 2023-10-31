@@ -27,7 +27,6 @@ class AutomatoFD:
         self.inicial = None
         self.finais = set()
 
-
     def limpaAfd(self):
 
         self.__deuErro = False
@@ -173,16 +172,20 @@ class AutomatoFD:
 
     def __equivalenciaEstados(self):
         matriz_equivalencia = []
+
+        for x in self.estados:
+            matriz_equivalencia.append([None] * len(self.estados))
+
         ec = EstadosComparacao
         for estado1 in self.estados:
             for estado2 in self.estados:
                 if estado1 > estado2:
                     if estado1 in self.finais and estado2 not in self.finais:
-                        matriz_equivalencia[estado1][estado2].append(ec.NAOEQUIVALENTE)
+                        matriz_equivalencia[estado1 - 1][estado2 - 1] = ec.NAOEQUIVALENTE
                     elif estado2 in self.finais and estado1 not in self.finais:
-                        matriz_equivalencia[estado1][estado2].append(ec.NAOEQUIVALENTE)
+                        matriz_equivalencia[estado1 - 1][estado2 - 1] = ec.NAOEQUIVALENTE
                     else:
-                        matriz_equivalencia[estado1][estado2].append(None)
+                        matriz_equivalencia[estado1 - 1][estado2 - 1] = ec.PENDENTE
 
         return matriz_equivalencia
 
@@ -196,41 +199,46 @@ class AutomatoFD:
             pendente = True
             for estado1 in self.estados:
                 equivalente = True
-                for estado2 in range(0, estado1):
-                    if matriz_equivalencia[estado1][estado2] is None or matriz_equivalencia[estado1][estado2] == ec.NAOEQUIVALENTE:
+                for estado2 in self.estados:
+                    if estado1 > estado2:
+                        if matriz_equivalencia[estado1 - 1][estado2 - 1] is None or matriz_equivalencia[estado1 - 1][
+                            estado2 - 1] == ec.NAOEQUIVALENTE:
 
-                        pendente = False
-                        for simbolo in self.alfabeto:
-                            if (estado1 + 1, simbolo) not in self.transicoes or (
-                                    estado2 + 1, simbolo) not in self.transicoes:
-                                equivalente = False
-                                matriz_equivalencia[estado1][estado2] = ec.NAOEQUIVALENTE
-                                break
+                            pendente = False
+                            for simbolo in self.alfabeto:
+                                if (estado1 + 1, simbolo) not in self.transicoes or (
+                                        estado2 + 1, simbolo) not in self.transicoes:
+                                    equivalente = False
+                                    matriz_equivalencia[estado1 - 1][estado2 - 1] = ec.NAOEQUIVALENTE
+                                    break
 
-                            estado1 = obter_destino(self, estado1, simbolo)
-                            estado2 = obter_destino(self, estado2, simbolo)
+                                estado1 = obter_destino(self, estado1, simbolo)
+                                estado2 = obter_destino(self, estado2, simbolo)
 
-                            if estado2 > estado1:
-                                estado2, estado1 = estado1, estado2
+                                if estado2 < estado1:
+                                    estado2, estado1 = estado1, estado2
 
-                            if estado1 != estado2 and matriz_equivalencia[estado1][estado2] is ec.NAOEQUIVALENTE:
-                                equivalente = False
+                                if estado1 != estado2 and matriz_equivalencia[estado1 - 1][
+                                    estado2 - 1] is ec.NAOEQUIVALENTE:
+                                    equivalente = False
+                                    mudou = False
+                                    matriz_equivalencia[estado1 - 1][estado2 - 1] = ec.NAOEQUIVALENTE
+                                    break
+                                elif estado1 != estado2 and (
+                                        matriz_equivalencia[estado1 - 1][estado2 - 1] is None or
+                                        matriz_equivalencia[estado1 - 1][
+                                            estado2 - 1] == ec.PENDENTE):
+                                    equivalente = False
+                                    mudou = False
+                                    matriz_equivalencia[estado1 - 1][estado2 - 1] = ec.PENDENTE
+                                    break
+
+                            if equivalente:
                                 mudou = False
-                                matriz_equivalencia[estado1][estado2] = ec.NAOEQUIVALENTE
-                                break
-                            elif estado1 != estado2 and (
-                                    matriz_equivalencia[estado1][estado2] is None or matriz_equivalencia[estado1][
-                                estado2] == ec.PENDENTE):
-                                equivalente = False
-                                mudou = False
-                                matriz_equivalencia[estado1][estado2] = ec.PENDENTE
-                                break
-                        if equivalente:
-                            mudou = False
-                            matriz_equivalencia[estado1][estado2] = ec.EQUIVALENTE
+                                matriz_equivalencia[estado1 - 1][estado2 - 1] = ec.EQUIVALENTE
 
-                            nova_linha = [estado1, estado2]
-                            matriz_equivalencia.append(nova_linha)
+                                nova_linha = [estado1, estado2]
+                                matriz_equivalencia.append(nova_linha)
 
         return matriz_equivalencia
 
@@ -422,7 +430,7 @@ if __name__ == '__main__':
     afdSecundario.criaTransicao(6, 3, 'a')
     afdSecundario.criaTransicao(6, 4, 'b')
 
-    afdSecundario.testa_equivalencia()
+    mat = afdSecundario.testa_equivalencia()
     print('equivalencias:', mat)
     print(afdSecundario)
 
