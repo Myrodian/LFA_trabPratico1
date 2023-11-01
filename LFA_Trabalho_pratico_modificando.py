@@ -152,7 +152,7 @@ class AutomatoFD:
             del self.transicoes[transicao]
 
     def minimizaAfd(self):
-        mat_equivalentes = self.equivalenciaEstados()
+        mat_equivalentes = self.testa_equivalencia()
         for par in mat_equivalentes:
             estado1 = par[0]
             estado2 = par[1]
@@ -170,27 +170,30 @@ class AutomatoFD:
             self.estados.discard(estadoexcluir)
             self.removerTransicoes(estadoexcluir)
 
+    def __nao_marcado(self, afd_dict):
+        for estado1 in self.estados:
+            for estado2 in self.estados:
+                if estado1 > estado2:
+                    if afd_dict[estado1, estado2] == EstadosComparacao.PENDENTE:
+                        afd_dict[estado1, estado2] = EstadosComparacao.EQUIVALENTE
+
     def __equivalenciaEstados(self):
-        matriz_equivalencia = []
-
-        for x in self.estados:
-            matriz_equivalencia.append([None] * len(self.estados))
-
+        afd_dict = dict()
         ec = EstadosComparacao
         for estado1 in self.estados:
             for estado2 in self.estados:
                 if estado1 > estado2:
                     if estado1 in self.finais and estado2 not in self.finais:
-                        matriz_equivalencia[estado1 - 1][estado2 - 1] = ec.NAOEQUIVALENTE
+                        afd_dict[estado1, estado2] = ec.NAOEQUIVALENTE
                     elif estado2 in self.finais and estado1 not in self.finais:
-                        matriz_equivalencia[estado1 - 1][estado2 - 1] = ec.NAOEQUIVALENTE
+                        afd_dict[estado1, estado2] = ec.NAOEQUIVALENTE
                     else:
-                        matriz_equivalencia[estado1 - 1][estado2 - 1] = ec.PENDENTE
+                        afd_dict[estado1, estado2] = ec.PENDENTE
 
-        return matriz_equivalencia
+        return afd_dict
 
     def testa_equivalencia(self):
-        matriz_equivalencia = self.__equivalenciaEstados()
+        afd_dict = self.__equivalenciaEstados()
         ec = EstadosComparacao
         pendente = True
         mudou = False
@@ -201,46 +204,53 @@ class AutomatoFD:
                 equivalente = True
                 for estado2 in self.estados:
                     if estado1 > estado2:
-                        if matriz_equivalencia[estado1 - 1][estado2 - 1] is None or matriz_equivalencia[estado1 - 1][
-                            estado2 - 1] == ec.NAOEQUIVALENTE:
-
+                        if afd_dict[estado1, estado2] is None or afd_dict[estado1, estado2] == ec.PENDENTE:
                             pendente = False
                             for simbolo in self.alfabeto:
-                                if (estado1 + 1, simbolo) not in self.transicoes or (
-                                        estado2 + 1, simbolo) not in self.transicoes:
+                                if (estado1, simbolo) not in self.transicoes or (
+                                        estado2, simbolo) not in self.transicoes:
                                     equivalente = False
-                                    matriz_equivalencia[estado1 - 1][estado2 - 1] = ec.NAOEQUIVALENTE
+                                    afd_dict[estado1, estado2] = ec.NAOEQUIVALENTE
                                     break
 
-                                estado1 = obter_destino(self, estado1, simbolo)
-                                estado2 = obter_destino(self, estado2, simbolo)
+                                estado1_proximo = self.transicoes[estado1, simbolo]
+                                estado2_proximo = self.transicoes[estado2, simbolo]
+                                if estado2_proximo > estado1_proximo:
+                                    estado2_proximo, estado1_proximo = estado1_proximo, estado2_proximo
 
-                                if estado2 < estado1:
-                                    estado2, estado1 = estado1, estado2
-
-                                if estado1 != estado2 and matriz_equivalencia[estado1 - 1][
-                                    estado2 - 1] is ec.NAOEQUIVALENTE:
-                                    equivalente = False
-                                    mudou = False
-                                    matriz_equivalencia[estado1 - 1][estado2 - 1] = ec.NAOEQUIVALENTE
-                                    break
-                                elif estado1 != estado2 and (
-                                        matriz_equivalencia[estado1 - 1][estado2 - 1] is None or
-                                        matriz_equivalencia[estado1 - 1][
-                                            estado2 - 1] == ec.PENDENTE):
+                                if estado1_proximo != estado2_proximo and afd_dict[
+                                    estado1_proximo, estado2_proximo] is ec.NAOEQUIVALENTE:
                                     equivalente = False
                                     mudou = False
-                                    matriz_equivalencia[estado1 - 1][estado2 - 1] = ec.PENDENTE
+                                    afd_dict[estado1, estado2] = ec.NAOEQUIVALENTE
                                     break
+                                elif estado2_proximo != estado1_proximo and (
+                                        afd_dict[estado1_proximo, estado2_proximo] is None or afd_dict[
+                                    estado1_proximo, estado2_proximo] == ec.PENDENTE):
+                                    equivalente = False
+                                    mudou = False
+                                    afd_dict[estado1, estado2] = ec.PENDENTE
 
                             if equivalente:
                                 mudou = False
-                                matriz_equivalencia[estado1 - 1][estado2 - 1] = ec.EQUIVALENTE
+                                afd_dict[estado1, estado2] = ec.EQUIVALENTE
 
-                                nova_linha = [estado1, estado2]
-                                matriz_equivalencia.append(nova_linha)
-
+        self.__nao_marcado(afd_dict)
+        matriz_equivalencia = []
+        for chave, valor in afd_dict.items():
+            if valor == EstadosComparacao.EQUIVALENTE:
+                matriz_equivalencia.append(chave)
         return matriz_equivalencia
+
+    def afdComplemento(self):
+        afd = AutomatoFD(self.alfabeto)
+        afd.estados = self.estados
+        afd.inicial = self.inicial
+        afd.transicoes = self.transicoes
+        for estado in self.estados:
+            if estado not in self.finais:
+                afd.mudaEstadoFinal(estado, True)
+        return afd
 
 
 def obter_destino(self, origem, simbolo):
@@ -262,33 +272,45 @@ def UniaoAutomatos(automato1, automato2):
     qtd_estados1 = len(automato1.estados)
     qtd_estados2 = len(automato2.estados)
     total_estados = qtd_estados2 + qtd_estados1
-    automato_concatenado = AutomatoFD((uneAlfabeto(automato1.alfabeto, automato2.alfabeto)))
-    for i in range(1, total_estados):
+    automato_concatenado = AutomatoFD(
+        (uneAlfabeto(automato1.alfabeto, automato2.alfabeto)))  # talvez nao da certo por causa do alfabeto
+
+    for i in range(1, total_estados + 1):
         automato_concatenado.criaEstado(i)
     automato_concatenado.mudaEstadoInicial(1)
 
+    automato_concatenado.finais = automato1.finais.union(automato2.finais)
+
     for estado in range(1, qtd_estados1 + 1):
         for simbolo in automato1.alfabeto:
-            automato_concatenado.criaTransicao(estado, obter_destino(automato1, estado, simbolo), simbolo)
+            destino = obter_destino(automato1, estado, simbolo)
+            automato_concatenado.criaTransicao(estado, destino, simbolo)
 
-    for estado in range(1, qtd_estados2):
+    for estado in range(1, qtd_estados2 + 1):
         for simbolo in automato2.alfabeto:
-            automato_concatenado.criaTransicao(estado + qtd_estados1, obter_destino(automato2, estado, simbolo),
-                                               simbolo)
-
-    automato_concatenado.finais = automato1.finais.union(automato2.finais)
+            destino = obter_destino(automato2, estado, simbolo)
+            automato_concatenado.criaTransicao(estado + qtd_estados1, destino, simbolo)
 
     return automato_concatenado
 
 
 def automatosEquivalentes(automato1, automato2):
     automato_concatenado = UniaoAutomatos(automato1, automato2)
+    # print(automato_concatenado)
+    matriz = automato_concatenado.testa_equivalencia()
+    # print(matriz)
+    palavra = 'ab'
 
-    if testa_equivalencia(automato_concatenado, automato1.inicial, automato1.inicial + len(automato1.estados)):
-        print("Os automatos são equivalentes!")
-        automato_concatenado.inicial = automato1.inicial
+    automato1.limpaAfd()
+    automato2.limpaAfd()
+    parada1 = automato1.move(palavra)
+    parada2 = automato2.move(palavra)
+    if automato1.deuErro() != automato2.deuErro():
+        print("não são iguais")
     else:
-        print("Os automatos NÃO são equivalentes!")
+        print("pode ser que sejam iguais")
+        tamanho1 = len(automato1.estados)
+        tamanho2 = len(automato2.estados)
     return automato_concatenado
 
 
@@ -301,33 +323,59 @@ def encontraParNaMatriz(matriz, valor1, valor2):
     return None  # Retorna None se o par ordenado não for encontrado na matriz
 
 
-def multiplicaAutomato(automato1, automato2):
+def multiplicaAutomato(automato1, automato2, operacao):
+    print(len(automato1.estados))
+    print(len(automato2.estados))
     num_estados = len(automato1.estados) * len(automato2.estados)
+    print(num_estados)
+    estado_erro = num_estados + 1
     conjunto_uniao_estados = [[x, y] for x in automato1.estados for y in automato2.estados]
+
     afd = AutomatoFD(uneAlfabeto(automato1.alfabeto, automato2.alfabeto))
-    # print('Estados de 1: ', automato1.estados)
-    # print('Estados de 2: ', automato2.estados)
-    # print('cnoj_uniao: ',conjunto_uniao_estados)
+
+    # cria estado de erro
+    afd.criaEstado(estado_erro)
+    for simbolo in afd.alfabeto:
+        afd.criaTransicao(estado_erro, estado_erro, simbolo)
+
     for estado in range(num_estados):  # para um estado de conj_uniao, 0 = automato1, 1 = automato2
         # print('estado: ',estado)
         afd.criaEstado(estado + 1)
+
     estado = 0
     for estado in range(num_estados):  # para um estado de conj_uniao, 0 = automato1, 1 = automato2
         # print('estado: ',estado)
+
         estadoDoAfd1 = conjunto_uniao_estados[estado][0]
         estadoDoAfd2 = conjunto_uniao_estados[estado][1]
+
         if (estadoDoAfd1 == automato1.inicial and estadoDoAfd2 == automato2.inicial):
             afd.inicial = (encontraParNaMatriz(conjunto_uniao_estados, estadoDoAfd1, estadoDoAfd2) + 1)
             # print('este par é o inicio: ', estadoDoAfd1, ';', estadoDoAfd2)
-        if ((estadoDoAfd1 in automato1.finais) or (estadoDoAfd2 in automato2.finais)):
-            afd.mudaEstadoFinal(encontraParNaMatriz(conjunto_uniao_estados, estadoDoAfd1, estadoDoAfd2) + 1, True)
-            # print('este par é dos finais: ', estadoDoAfd1, ';', estadoDoAfd2)
+
+        if (operacao == 1):  # uniao
+
+            if (estadoDoAfd1 in automato1.finais or estadoDoAfd2 in automato2.finais):
+                afd.mudaEstadoFinal(encontraParNaMatriz(conjunto_uniao_estados, estadoDoAfd1, estadoDoAfd2) + 1, True)
+
+        elif (operacao == 2):  # intercessao
+
+            if (estadoDoAfd1 in automato1.finais and estadoDoAfd2 in automato2.finais):
+                afd.mudaEstadoFinal(encontraParNaMatriz(conjunto_uniao_estados, estadoDoAfd1, estadoDoAfd2) + 1, True)
+        elif (operacao == 3):  # intercessao
+
+            if (estadoDoAfd1 in automato1.finais and estadoDoAfd2 not in automato2.finais):
+                afd.mudaEstadoFinal(encontraParNaMatriz(conjunto_uniao_estados, estadoDoAfd1, estadoDoAfd2) + 1, True)
+
         for simbolo in automato1.alfabeto:
+
             destinoTransicao1 = obter_destino(automato1, estadoDoAfd1, simbolo)
             destinoTransicao2 = obter_destino(automato2, estadoDoAfd2, simbolo)
-            afd.criaTransicao(estado + 1,
-                              (encontraParNaMatriz(conjunto_uniao_estados, destinoTransicao1, destinoTransicao2) + 1),
-                              simbolo)
+            destino = encontraParNaMatriz(conjunto_uniao_estados, destinoTransicao1, destinoTransicao2)
+            if (destino != None):
+                afd.criaTransicao(estado + 1, destino + 1, simbolo)
+            else:
+                afd.criaTransicao(estado + 1, estado_erro, simbolo)
     return afd
 
 
@@ -393,21 +441,23 @@ def automatoUniao(automato1, automato2):
 
 if __name__ == '__main__':
 
-    # afd = AutomatoFD('ab')
-    # afdSecundario = AutomatoFD('01')
-
-    # for i in range(1, 4):
-    #    afd.criaEstado(i)
-    # afd.mudaEstadoInicial(1)
+    afd = AutomatoFD('ab')
+    for i in range(1, 4):
+        afd.criaEstado(i)
+    afd.mudaEstadoInicial(1)
 
     # Defina o estado final
-    # afd.mudaEstadoFinal(2, True)
+    afd.mudaEstadoFinal(2, True)
 
     # Crie as transições
-    # afd.criaTransicao(1, 2, 'a')
-    # afd.criaTransicao(2, 3, 'b')
-    # afd.criaTransicao(2, 1, 'a')
-
+    afd.criaTransicao(1, 3, 'a')
+    afd.criaTransicao(1, 2, 'b')
+    afd.criaTransicao(2, 1, 'a')
+    afd.criaTransicao(2, 2, 'b')
+    afd.criaTransicao(3, 3, 'a')
+    afd.criaTransicao(3, 2, 'b')
+    print("Automato 1:\n", afd)
+    print('-----------------------------------------------\\-----------------------------------------------')
     afdSecundario = AutomatoFD('ab')
     for i in range(1, 7):
         afdSecundario.criaEstado(i)
@@ -429,15 +479,20 @@ if __name__ == '__main__':
     afdSecundario.criaTransicao(5, 3, 'b')
     afdSecundario.criaTransicao(6, 3, 'a')
     afdSecundario.criaTransicao(6, 4, 'b')
-
-    mat = afdSecundario.testa_equivalencia()
-    print('equivalencias:', mat)
-    print(afdSecundario)
-
-    #  afdSecundario.minimizaAfd()
-
+    print("Automato 2:\n", afdSecundario)
+    # mat = afdSecundario.testa_equivalencia()
+    # print("matriz de equivalencia:", mat)
     # print(afdSecundario)
-    # print("estados equivalentes:", afd.equivalenciaEstados())
+    # print('-----------------------------------------------\\-----------------------------------------------')
+    # ------------------------------------------------
+    # MINIMIZAÇÃO
+    # afdSecundario.minimizaAfd()
+    # print(afdSecundario)
+    # ------------------------------------------------
+    # print('-----------------------------------------------\\-----------------------------------------------')
+    concatenado = automatosEquivalentes(afd, afdSecundario)
+    # print(concatenado)
+    # print('-----------------------------------------------\\-----------------------------------------------')
     # afdTernario = multiplicaAutomato(afd, afdSecundario)
     # print(afdTernario)
     # multiplicaAutomato(afd, afdSecundario)
@@ -449,12 +504,13 @@ if __name__ == '__main__':
     # print(automatoIntercesao(afd,afdSecundario))
     # print('-----------------------------------------------\\-----------------------------------------------')
     # print(automatoUniao(afd,afdSecundario))
-    print('-----------------------------------------------\\-----------------------------------------------')
-    print(afdSecundario)
+    # print(afdSecundario)
     # afd.salvaAutomato('automatoArquivo')
-
     # automatosEquivalentes(afd, afdSecundario)
-
+    print(afd)
+    afdterciario = afd.afdComplemento()
+    print('-----------------------------------------------\\-----------------------------------------------')
+    print(afdterciario)
     cadeia = 'ababbbba'
     afdSecundario.limpaAfd()
     parada = afdSecundario.move(cadeia)
